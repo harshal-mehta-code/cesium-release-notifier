@@ -6,7 +6,9 @@ const path = require('path');
 const REPO_OWNER = 'CesiumGS';
 const REPO_NAME = 'cesium-unreal';
 const LAST_RELEASE_FILE = 'last_checked_release.txt';
-const LAST_RELEASE_PATH = path.join(process.env.GITHUB_WORKSPACE, LAST_RELEASE_FILE);
+// The artifact is downloaded into a folder named after the artifact itself
+const LAST_RELEASE_DOWNLOAD_DIR = 'last-checked-release'; // This matches the artifact name
+const LAST_RELEASE_PATH = path.join(process.env.GITHUB_WORKSPACE, LAST_RELEASE_DOWNLOAD_DIR, LAST_RELEASE_FILE);
 
 async function getLatestRelease() {
   try {
