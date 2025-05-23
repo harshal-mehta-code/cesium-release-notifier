@@ -11,6 +11,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Download last checked release tag (if it exists from a previous run)
+      # This step ensures the 'last_checked_release.txt' is available in the workspace
+      # for the 'check_for_new_release' step. If the artifact doesn't exist (first run),
+      # this step will simply complete without downloading anything.
+      - name: Download last checked release tag
+        uses: actions/download-artifact@v4
+        with:
+          name: last-checked-release
+          path: . # Downloads to the root of the workspace
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -23,7 +33,7 @@ jobs:
         run: |
           npm install axios nodemailer
 
-      # This step checks for a new release and sends an email.
+      # Step 2: Check for new release and send notification
       # The Node.js script is embedded directly here.
       - name: Check for new release and send notification
         env:
@@ -87,8 +97,6 @@ jobs:
                 pass: process.env.EMAIL_PASSWORD
               },
               tls: {
-                # This setting makes Nodemailer accept self-signed or invalid certificates.
-                # Use with caution in production, but for personal use, it's often practical.
                 rejectUnauthorized: false
               }
             });
@@ -125,16 +133,8 @@ jobs:
           async function run() {
             const latestRelease = await getLatestRelease();
             
-            # Use the artifact from the previous run if available
-            let lastCheckedTag = null;
-            try {
-              # Check if the artifact was downloaded to the workspace root
-              const artifactContent = fs.readFileSync(LAST_RELEASE_PATH, 'utf8');
-              lastCheckedTag = artifactContent.trim();
-              console.log(`Last checked tag from artifact: ${lastCheckedTag}`);
-            } catch (error) {
-              console.log(`No previous artifact found for ${LAST_RELEASE_FILE}. This is normal for the first run.`);
-            }
+            # Read last checked tag from the downloaded artifact
+            const lastCheckedTag = await readLastCheckedRelease();
 
             if (latestRelease && latestRelease.tag_name !== lastCheckedTag) {
               console.log(`New release found! Old tag: ${lastCheckedTag || 'None'}, New tag: ${latestRelease.tag_name}`);
@@ -146,23 +146,14 @@ jobs:
           }
 
           run();
-        shell: node {0} # This tells the runner to execute the above block as a Node.js script
+        shell: node {0}
 
-      - name: Upload last checked release tag for next run
+      # Step 3: Upload the updated last checked release tag
+      - name: Upload last checked release tag
         uses: actions/upload-artifact@v4
         with:
           name: last-checked-release
           path: last_checked_release.txt
-          if-no-files-found: ignore # Don't fail if the file wasn't created (e.g., on first run)
-
-      - name: Download last checked release tag (for subsequent runs)
-        # This step ensures the 'last_checked_release.txt' is available in the workspace
-        # for the 'check_for_new_release' step on the next run.
-        # It needs to run *before* the script that reads it, but in the same job,
-        # artifacts are downloaded at the start of the job if specified.
-        # This download step is placed here for clarity, but its effect is job-wide.
-        uses: actions/download-artifact@v4
-        with:
-          name: last-checked-release
-          path: . # Downloads to the root of the workspace
-        if-no-files-found: ignore # Don't fail if the artifact doesn't exist yet (first run)
+          # if-no-files-found: ignore is valid here, ensuring it doesn't fail if the file wasn't created for some reason.
+          # For instance, if the getLatestRelease() failed and the script exited early.
+          if-no-files-found: ignore
