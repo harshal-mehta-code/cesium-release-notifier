@@ -1,0 +1,168 @@
+name: Cesium Unreal Release Notifier
+
+on:
+  schedule:
+    # Runs every day at 00:00 UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allows manual triggering from the GitHub Actions tab
+
+jobs:
+  check_for_new_release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install axios nodemailer
+
+      # This step checks for a new release and sends an email.
+      # The Node.js script is embedded directly here.
+      - name: Check for new release and send notification
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        run: |
+          # Node.js script to fetch latest release, compare, and send email
+          const axios = require('axios');
+          const nodemailer = require('nodemailer');
+          const fs = require('fs');
+          const path = require('path');
+
+          const REPO_OWNER = 'CesiumGS';
+          const REPO_NAME = 'cesium-unreal';
+          const LAST_RELEASE_FILE = 'last_checked_release.txt';
+          const LAST_RELEASE_PATH = path.join(process.env.GITHUB_WORKSPACE, LAST_RELEASE_FILE);
+
+          async function getLatestRelease() {
+            try {
+              const response = await axios.get(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`, {
+                headers: {
+                  'Authorization': `token ${process.env.GH_TOKEN}`,
+                  'Accept': 'application/vnd.github.v3+json'
+                }
+              });
+              return response.data;
+            } catch (error) {
+              console.error('Error fetching latest release:', error.message);
+              process.exit(1);
+            }
+          }
+
+          async function readLastCheckedRelease() {
+            try {
+              if (fs.existsSync(LAST_RELEASE_PATH)) {
+                return fs.readFileSync(LAST_RELEASE_PATH, 'utf8').trim();
+              }
+            } catch (error) {
+              console.warn(`Could not read ${LAST_RELEASE_FILE}:`, error.message);
+            }
+            return null;
+          }
+
+          async function writeLastCheckedRelease(tag) {
+            try {
+              fs.writeFileSync(LAST_RELEASE_PATH, tag);
+              console.log(`Updated ${LAST_RELEASE_FILE} with tag: ${tag}`);
+            } catch (error) {
+              console.error(`Error writing to ${LAST_RELEASE_FILE}:`, error.message);
+            }
+          }
+
+          async function sendEmail(release) {
+            const transporter = nodemailer.createTransport({
+              host: 'smtp.gmail.com', # IMPORTANT: Modify this if you are not using Gmail
+              port: 587,              # IMPORTANT: Typically 587 for TLS/STARTTLS, 465 for SSL
+              secure: false,          # IMPORTANT: Use 'true' for 465, 'false' for 587
+              auth: {
+                user: process.env.EMAIL_USERNAME,
+                pass: process.env.EMAIL_PASSWORD
+              },
+              tls: {
+                # This setting makes Nodemailer accept self-signed or invalid certificates.
+                # Use with caution in production, but for personal use, it's often practical.
+                rejectUnauthorized: false
+              }
+            });
+
+            const mailOptions = {
+              from: process.env.EMAIL_USERNAME,
+              to: process.env.EMAIL_USERNAME, # Sends the notification to yourself
+              subject: `🚨 New Cesium Unreal Release: ${release.tag_name} 🚨`,
+              html: `
+                <p>A new release of Cesium Unreal has been detected!</p>
+                <p><b>Release Name:</b> ${release.name || release.tag_name}</p>
+                <p><b>Tag:</b> ${release.tag_name}</p>
+                <p><b>Published At:</b> ${new Date(release.published_at).toLocaleString()}</p>
+                <p><b>Release URL:</b> <a href="${release.html_url}">${release.html_url}</a></p>
+                <br>
+                <p>You can find more details and download the release here:</p>
+                <a href="${release.html_url}">${release.html_url}</a>
+              `
+            };
+
+            try {
+              await transporter.sendMail(mailOptions);
+              console.log('Email notification sent successfully!');
+            } catch (error) {
+              console.error('Error sending email:', error.message);
+              if (error.responseCode === 535) {
+                  console.error('Authentication failed. Please check your EMAIL_USERNAME and EMAIL_PASSWORD secrets.');
+                  console.error('If using Gmail, ensure you are using an App Password and that 2FA is enabled.');
+              }
+              process.exit(1); # Exit with an error code if email fails
+            }
+          }
+
+          async function run() {
+            const latestRelease = await getLatestRelease();
+            
+            # Use the artifact from the previous run if available
+            let lastCheckedTag = null;
+            try {
+              # Check if the artifact was downloaded to the workspace root
+              const artifactContent = fs.readFileSync(LAST_RELEASE_PATH, 'utf8');
+              lastCheckedTag = artifactContent.trim();
+              console.log(`Last checked tag from artifact: ${lastCheckedTag}`);
+            } catch (error) {
+              console.log(`No previous artifact found for ${LAST_RELEASE_FILE}. This is normal for the first run.`);
+            }
+
+            if (latestRelease && latestRelease.tag_name !== lastCheckedTag) {
+              console.log(`New release found! Old tag: ${lastCheckedTag || 'None'}, New tag: ${latestRelease.tag_name}`);
+              await sendEmail(latestRelease);
+              await writeLastCheckedRelease(latestRelease.tag_name);
+            } else {
+              console.log('No new release found or tag is the same as last checked.');
+            }
+          }
+
+          run();
+        shell: node {0} # This tells the runner to execute the above block as a Node.js script
+
+      - name: Upload last checked release tag for next run
+        uses: actions/upload-artifact@v4
+        with:
+          name: last-checked-release
+          path: last_checked_release.txt
+          if-no-files-found: ignore # Don't fail if the file wasn't created (e.g., on first run)
+
+      - name: Download last checked release tag (for subsequent runs)
+        # This step ensures the 'last_checked_release.txt' is available in the workspace
+        # for the 'check_for_new_release' step on the next run.
+        # It needs to run *before* the script that reads it, but in the same job,
+        # artifacts are downloaded at the start of the job if specified.
+        # This download step is placed here for clarity, but its effect is job-wide.
+        uses: actions/download-artifact@v4
+        with:
+          name: last-checked-release
+          path: . # Downloads to the root of the workspace
+        if-no-files-found: ignore # Don't fail if the artifact doesn't exist yet (first run)
