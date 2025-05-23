@@ -20,6 +20,7 @@ jobs:
         with:
           name: last-checked-release
           path: . # Downloads to the root of the workspace
+        continue-on-error: true # <--- ADD THIS LINE! This is the fix.
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -154,6 +155,4 @@ jobs:
         with:
           name: last-checked-release
           path: last_checked_release.txt
-          # if-no-files-found: ignore is valid here, ensuring it doesn't fail if the file wasn't created for some reason.
-          # For instance, if the getLatestRelease() failed and the script exited early.
           if-no-files-found: ignore
