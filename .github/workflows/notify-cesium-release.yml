@@ -11,13 +11,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Download last checked release tag (if it exists from a previous run)
-      - name: Download last checked release tag
-        uses: actions/download-artifact@v4
+      # Step 1: Download last checked release tag from previous run
+      # This action specifically looks for artifacts from a previous run of this workflow.
+      - name: Download last checked release tag from previous run
+        uses: dawidd6/action-download-artifact@v2 # <--- CHANGED ACTION HERE
         with:
-          name: last-checked-release
-          path: . # Downloads to the root of the workspace
-        continue-on-error: true # This allows the workflow to continue even if no artifact is found on the first run
+          workflow: notify-cesium-release.yml # <--- Specify the name of *this* workflow file
+          name: last-checked-release         # <--- Name of the artifact to download
+          path: .                            # <--- Path to download to (workspace root)
+          if_no_artifact_found: ignore       # <--- Handles the case where no artifact exists (first run)
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -37,7 +39,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-        run: node script.js # <--- THIS IS THE KEY CHANGE
+        run: node script.js
 
       # Step 3: Upload the updated last checked release tag
       - name: Upload last checked release tag
