@@ -12,15 +12,12 @@ jobs:
 
     steps:
       # Step 1: Download last checked release tag (if it exists from a previous run)
-      # This step ensures the 'last_checked_release.txt' is available in the workspace
-      # for the 'check_for_new_release' step. If the artifact doesn't exist (first run),
-      # this step will simply complete without downloading anything.
       - name: Download last checked release tag
         uses: actions/download-artifact@v4
         with:
           name: last-checked-release
           path: . # Downloads to the root of the workspace
-        continue-on-error: true # <--- ADD THIS LINE! This is the fix.
+        continue-on-error: true # This allows the workflow to continue even if no artifact is found on the first run
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,14 +32,13 @@ jobs:
           npm install axios nodemailer
 
       # Step 2: Check for new release and send notification
-      # The Node.js script is embedded directly here.
       - name: Check for new release and send notification
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
         run: |
-          # Node.js script to fetch latest release, compare, and send email
+          # REMOVE THIS LINE: # Node.js script to fetch latest release, compare, and send email
           const axios = require('axios');
           const nodemailer = require('nodemailer');
           const fs = require('fs');
@@ -90,9 +86,9 @@ jobs:
 
           async function sendEmail(release) {
             const transporter = nodemailer.createTransport({
-              host: 'smtp.gmail.com', # IMPORTANT: Modify this if you are not using Gmail
-              port: 587,              # IMPORTANT: Typically 587 for TLS/STARTTLS, 465 for SSL
-              secure: false,          # IMPORTANT: Use 'true' for 465, 'false' for 587
+              host: 'smtp.gmail.com', // IMPORTANT: Modify this if you are not using Gmail
+              port: 587,              // IMPORTANT: Typically 587 for TLS/STARTTLS, 465 for SSL
+              secure: false,          // IMPORTANT: Use 'true' for 465, 'false' for 587
               auth: {
                 user: process.env.EMAIL_USERNAME,
                 pass: process.env.EMAIL_PASSWORD
@@ -104,7 +100,7 @@ jobs:
 
             const mailOptions = {
               from: process.env.EMAIL_USERNAME,
-              to: process.env.EMAIL_USERNAME, # Sends the notification to yourself
+              to: process.env.EMAIL_USERNAME, // Sends the notification to yourself
               subject: `🚨 New Cesium Unreal Release: ${release.tag_name} 🚨`,
               html: `
                 <p>A new release of Cesium Unreal has been detected!</p>
@@ -127,14 +123,14 @@ jobs:
                   console.error('Authentication failed. Please check your EMAIL_USERNAME and EMAIL_PASSWORD secrets.');
                   console.error('If using Gmail, ensure you are using an App Password and that 2FA is enabled.');
               }
-              process.exit(1); # Exit with an error code if email fails
+              process.exit(1); // Exit with an error code if email fails
             }
           }
 
           async function run() {
             const latestRelease = await getLatestRelease();
             
-            # Read last checked tag from the downloaded artifact
+            // Read last checked tag from the downloaded artifact
             const lastCheckedTag = await readLastCheckedRelease();
 
             if (latestRelease && latestRelease.tag_name !== lastCheckedTag) {
