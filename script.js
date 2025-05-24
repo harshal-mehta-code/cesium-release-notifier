@@ -6,7 +6,7 @@ const path = require('path');
 const REPO_OWNER = 'CesiumGS';
 const REPO_NAME = 'cesium-unreal';
 const LAST_RELEASE_FILE = 'last_checked_release.txt';
-// IMPORTANT FIX: Path is now directly in the workspace root for simplicity and reliability
+// IMPORTANT: Path is now directly in the workspace root
 const LAST_RELEASE_PATH = path.join(process.env.GITHUB_WORKSPACE, LAST_RELEASE_FILE);
 
 async function getLatestRelease() {
@@ -26,12 +26,6 @@ async function getLatestRelease() {
 
 async function readLastCheckedRelease() {
   try {
-    // IMPORTANT: When downloaded, artifacts are usually in a subdirectory named after the artifact.
-    // So, we need to check inside that subdirectory if dawidd6/action-download-artifact puts it there.
-    // However, for this round, we are simplifying by having script.js write to the root
-    // and relying on dawidd6/action-download-artifact's 'path: .' to unzip to the root.
-    // If you are using actions/download-artifact in future where it unzips into a folder,
-    // you will need to read from path.join(process.env.GITHUB_WORKSPACE, 'ARTIFACT_NAME', LAST_RELEASE_FILE);
     if (fs.existsSync(LAST_RELEASE_PATH)) {
       const tag = fs.readFileSync(LAST_RELEASE_PATH, 'utf8').trim();
       console.log(`Successfully read last checked tag from ${LAST_RELEASE_FILE} at ${LAST_RELEASE_PATH}: ${tag}`);
@@ -45,7 +39,6 @@ async function readLastCheckedRelease() {
 
 async function writeLastCheckedRelease(tag) {
   try {
-    // No need to mkdirSync as it's directly in the root and will be created or overwritten
     fs.writeFileSync(LAST_RELEASE_PATH, tag);
     console.log(`Updated ${LAST_RELEASE_FILE} with tag: ${tag} at path: ${LAST_RELEASE_PATH}`);
   } catch (error) {
@@ -55,9 +48,9 @@ async function writeLastCheckedRelease(tag) {
 
 async function sendEmail(release) {
   const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com', // IMPORTANT: Modify this if you are not using Gmail
-    port: 587,              // IMPORTANT: Typically 587 for TLS/STARTTLS, 465 for SSL
-    secure: false,          // IMPORTANT: Use 'true' for 465, 'false' for 587
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
     auth: {
       user: process.env.EMAIL_USERNAME,
       pass: process.env.EMAIL_PASSWORD
@@ -69,7 +62,7 @@ async function sendEmail(release) {
 
   const mailOptions = {
     from: process.env.EMAIL_USERNAME,
-    to: process.env.EMAIL_USERNAME, // Sends the notification to yourself
+    to: process.env.EMAIL_USERNAME,
     subject: `🚨 New Cesium Unreal Release: ${release.tag_name} 🚨`,
     html: `
       <p>A new release of Cesium Unreal has been detected!</p>
@@ -92,14 +85,13 @@ async function sendEmail(release) {
         console.error('Authentication failed. Please check your EMAIL_USERNAME and EMAIL_PASSWORD secrets.');
         console.error('If using Gmail, ensure you are using an App Password and that 2FA is enabled.');
     }
-    process.exit(1); // Exit with an error code if email fails
+    process.exit(1);
   }
 }
 
 async function run() {
   const latestRelease = await getLatestRelease();
   
-  // Read last checked tag from the downloaded artifact
   const lastCheckedTag = await readLastCheckedRelease();
 
   if (latestRelease && latestRelease.tag_name !== lastCheckedTag) {
@@ -108,7 +100,6 @@ async function run() {
     await writeLastCheckedRelease(latestRelease.tag_name);
   } else {
     console.log('No new release found or tag is the same as last checked.');
-    // Add logging to explicitly show the tags being compared for debugging
     console.log(`Debug: Current latest tag: ${latestRelease ? latestRelease.tag_name : 'N/A'}, Last checked tag: ${lastCheckedTag || 'None'}`);
   }
 }
