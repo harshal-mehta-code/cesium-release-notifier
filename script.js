@@ -6,9 +6,8 @@ const path = require('path');
 const REPO_OWNER = 'CesiumGS';
 const REPO_NAME = 'cesium-unreal';
 const LAST_RELEASE_FILE = 'last_checked_release.txt';
-// The artifact is downloaded into a folder named after the artifact itself
-const LAST_RELEASE_DOWNLOAD_DIR = 'last-checked-release'; // This matches the artifact name
-const LAST_RELEASE_PATH = path.join(process.env.GITHUB_WORKSPACE, LAST_RELEASE_DOWNLOAD_DIR, LAST_RELEASE_FILE);
+// IMPORTANT FIX: Path is now directly in the workspace root for simplicity and reliability
+const LAST_RELEASE_PATH = path.join(process.env.GITHUB_WORKSPACE, LAST_RELEASE_FILE);
 
 async function getLatestRelease() {
   try {
@@ -27,21 +26,30 @@ async function getLatestRelease() {
 
 async function readLastCheckedRelease() {
   try {
+    // IMPORTANT: When downloaded, artifacts are usually in a subdirectory named after the artifact.
+    // So, we need to check inside that subdirectory if dawidd6/action-download-artifact puts it there.
+    // However, for this round, we are simplifying by having script.js write to the root
+    // and relying on dawidd6/action-download-artifact's 'path: .' to unzip to the root.
+    // If you are using actions/download-artifact in future where it unzips into a folder,
+    // you will need to read from path.join(process.env.GITHUB_WORKSPACE, 'ARTIFACT_NAME', LAST_RELEASE_FILE);
     if (fs.existsSync(LAST_RELEASE_PATH)) {
-      return fs.readFileSync(LAST_RELEASE_PATH, 'utf8').trim();
+      const tag = fs.readFileSync(LAST_RELEASE_PATH, 'utf8').trim();
+      console.log(`Successfully read last checked tag from ${LAST_RELEASE_FILE} at ${LAST_RELEASE_PATH}: ${tag}`);
+      return tag;
     }
   } catch (error) {
-    console.warn(`Could not read ${LAST_RELEASE_FILE}:`, error.message);
+    console.warn(`Could not read ${LAST_RELEASE_FILE} at ${LAST_RELEASE_PATH}:`, error.message);
   }
   return null;
 }
 
 async function writeLastCheckedRelease(tag) {
   try {
+    // No need to mkdirSync as it's directly in the root and will be created or overwritten
     fs.writeFileSync(LAST_RELEASE_PATH, tag);
-    console.log(`Updated ${LAST_RELEASE_FILE} with tag: ${tag}`);
+    console.log(`Updated ${LAST_RELEASE_FILE} with tag: ${tag} at path: ${LAST_RELEASE_PATH}`);
   } catch (error) {
-    console.error(`Error writing to ${LAST_RELEASE_FILE}:`, error.message);
+    console.error(`Error writing to ${LAST_RELEASE_FILE} at path ${LAST_RELEASE_PATH}:`, error.message);
   }
 }
 
@@ -100,6 +108,8 @@ async function run() {
     await writeLastCheckedRelease(latestRelease.tag_name);
   } else {
     console.log('No new release found or tag is the same as last checked.');
+    // Add logging to explicitly show the tags being compared for debugging
+    console.log(`Debug: Current latest tag: ${latestRelease ? latestRelease.tag_name : 'N/A'}, Last checked tag: ${lastCheckedTag || 'None'}`);
   }
 }
 
