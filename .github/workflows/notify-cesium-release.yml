@@ -11,18 +11,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Always checkout the repository first to get a clean working directory
+      # This also ensures script.js is present for Node.js to run.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --- DEBUGGING STEP: Show current directory after checkout ---
+      - name: Debug: List contents of workspace after checkout
+        run: ls -R $GITHUB_WORKSPACE
+
       # Step 1: Download last checked release tag from previous run
       # This action specifically looks for artifacts from a previous run of this workflow.
       - name: Download last checked release tag from previous run
-        uses: dawidd6/action-download-artifact@v2 # <--- CHANGED ACTION HERE
+        uses: dawidd6/action-download-artifact@v2
         with:
-          workflow: notify-cesium-release.yml # <--- Specify the name of *this* workflow file
-          name: last-checked-release         # <--- Name of the artifact to download
-          path: .                            # <--- Path to download to (workspace root)
-          if_no_artifact_found: ignore       # <--- Handles the case where no artifact exists (first run)
+          workflow: notify-cesium-release.yml
+          name: last-checked-release
+          path: . # Downloads to the workspace root, and dawidd6 usually unzips directly here.
+          if_no_artifact_found: ignore
+        id: download_artifact_step
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      # --- DEBUGGING STEP: Check if artifact file exists after download ---
+      - name: Debug: Check if artifact file exists after download
+        run: |
+          if [ -f "last_checked_release.txt" ]; then # Checking in root now
+            echo "SUCCESS: last_checked_release.txt exists after download!"
+            cat last_checked_release.txt
+          else
+            echo "FAILURE: last_checked_release.txt does NOT exist after download."
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -34,6 +51,7 @@ jobs:
           npm install axios nodemailer
 
       # Step 2: Check for new release and send notification
+      # The script now assumes last_checked_release.txt is in the root
       - name: Check for new release and send notification
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
@@ -41,11 +59,35 @@ jobs:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
         run: node script.js
 
+      # --- DEBUGGING STEP: Check content before upload ---
+      - name: Debug: List contents of workspace before upload
+        run: ls -R $GITHUB_WORKSPACE
+        # Check if the file created by Node.js script is in the root:
+        # if [ -f "last_checked_release.txt" ]; then echo "File exists for upload!"; else echo "File NOT found for upload!"; fi
+
       # Step 3: Upload the updated last checked release tag
       - name: Upload last checked release tag
         uses: actions/upload-artifact@v4
         with:
           name: last-checked-release
-          # CRITICAL FIX: Point to the subdirectory where script.js writes the file
-          path: last-checked-release/last_checked_release.txt # <--- THIS IS THE CHANGE!
+          path: last_checked_release.txt # <--- CRITICAL FIX: Pointing to workspace root now
           if-no-files-found: ignore
+        id: upload_artifact_step
+
+      # --- DEBUGGING STEP: List artifacts for the current run after upload ---
+      - name: Debug: List artifacts after upload for current run
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { data: artifacts } = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+            });
+            console.log('Artifacts uploaded in this run:', artifacts.artifacts);
+            const foundArtifact = artifacts.artifacts.find(a => a.name === 'last-checked-release');
+            if (foundArtifact) {
+                console.log('Found "last-checked-release" artifact with ID:', foundArtifact.id, 'and size:', foundArtifact.size_in_bytes);
+            } else {
+                console.log('Artifact "last-checked-release" not found in this run after upload step.');
+            }
