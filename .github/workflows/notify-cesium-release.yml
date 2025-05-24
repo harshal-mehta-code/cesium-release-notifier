@@ -21,7 +21,6 @@ jobs:
         run: ls -R $GITHUB_WORKSPACE
 
       # Step 1: Download last checked release tag from previous run
-      # This action specifically looks for artifacts from a previous run of this workflow.
       - name: Download last checked release tag from previous run
         uses: dawidd6/action-download-artifact@v2
         with:
@@ -70,7 +69,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: last-checked-release
-          path: last_checked_release.txt # <--- CRITICAL FIX: Pointing to workspace root now
+          path: last_checked_release.txt # <--- Pointing to workspace root now
           if-no-files-found: ignore
         id: upload_artifact_step
 
