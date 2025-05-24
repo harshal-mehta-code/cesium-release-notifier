@@ -1,0 +1,13 @@
+name: Cesium Unreal Release Notifier
+
+on:
+  workflow_dispatch: # Allows manual triggering from the GitHub Actions tab
+
+jobs:
+  check_for_new_release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Debug always works
+        run: echo "Hello world"
