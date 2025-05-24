@@ -1,0 +1,87 @@
+name: Cesium Unreal Release Notifier
+
+on:
+  schedule:
+    # Runs every day at 00:00 UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allows manual triggering from the GitHub Actions tab
+
+jobs:
+  check_for_new_release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --- DEBUGGING STEP: Show current directory after checkout ---
+      - name: Debug: List contents of workspace after checkout
+        run: ls -R $GITHUB_WORKSPACE
+
+      # Step 1: Download last checked release tag from previous run
+      - name: Download last checked release tag from previous run
+        uses: dawidd6/action-download-artifact@v2
+        id: download_artifact_step
+        with:
+          workflow: notify-cesium-release.yml
+          name: last-checked-release
+          path: .
+          if_no_artifact_found: ignore
+
+      # --- DEBUGGING STEP: Check if artifact file exists after download ---
+      - name: Debug: Check if artifact file exists after download
+        run: |
+          if [ -f "last_checked_release.txt" ]; then
+            echo "SUCCESS: last_checked_release.txt exists after download!"
+            cat last_checked_release.txt
+          else
+            echo "FAILURE: last_checked_release.txt does NOT exist after download."
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install axios nodemailer
+
+      # Step 2: Check for new release and send notification
+      - name: Check for new release and send notification
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        run: node script.js
+
+      # --- DEBUGGING STEP: Check content before upload ---
+      - name: Debug: List contents of workspace before upload
+        run: ls -R $GITHUB_WORKSPACE
+
+      # Step 3: Upload the updated last checked release tag
+      - name: Upload last checked release tag
+        uses: actions/upload-artifact@v4
+        with:
+          name: last-checked-release
+          path: last_checked_release.txt
+          if-no-files-found: ignore
+        id: upload_artifact_step
+
+      # --- DEBUGGING STEP: List artifacts for the current run after upload ---
+      - name: Debug: List artifacts after upload for current run
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { data: artifacts } = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+            });
+            console.log('Artifacts uploaded in this run:', artifacts.artifacts);
+            const foundArtifact = artifacts.artifacts.find(a => a.name === 'last-checked-release');
+            if (foundArtifact) {
+                console.log('Found "last-checked-release" artifact with ID:', foundArtifact.id, 'and size:', foundArtifact.size_in_bytes);
+            } else {
+                console.log('Artifact "last-checked-release" not found in this run after upload step.');
+            }
