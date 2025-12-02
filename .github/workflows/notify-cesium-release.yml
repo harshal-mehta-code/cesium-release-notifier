@@ -12,12 +12,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download last checked release tag from previous run
+      - name: Download last checked release state from previous run
         uses: dawidd6/action-download-artifact@v2
         id: download_artifact_step
         with:
           workflow: notify-cesium-release.yml
-          name: last-checked-release
+          name: release-state
           path: .
           if_no_artifact_found: ignore
 
@@ -36,10 +36,10 @@ jobs:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
         run: node script.js
 
-      - name: Upload last checked release tag
+      - name: Upload last checked release state
         uses: actions/upload-artifact@v4
         with:
-          name: last-checked-release
-          path: last_checked_release.txt
+          name: release-state
+          path: release_state.json
           if-no-files-found: ignore
         id: upload_artifact_step
